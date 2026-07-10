@@ -1,0 +1,10 @@
+---
+title: "Our demonstrations"
+format: html
+listing:
+  contents: Demonstrations
+  type: grid
+  sort: "date desc"
+  fields: [image, date, title]
+---
+

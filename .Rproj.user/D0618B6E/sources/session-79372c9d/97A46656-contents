@@ -1,0 +1,64 @@
+---
+pagetitle: "Ja zum Nachtzug"
+listing:
+  id: last-activities
+  contents: 
+    - "/Actions/Demonstrations/*.qmd"
+    - "/Press/Press-releases/*.qmd"
+  type: grid
+  sort: "date desc"
+  fields: [image, date, title,categories]
+---
+
+::: {.column-page}
+
+![](/img/home.png)
+
+:::
+
+
+## Our principles
+
+Our collective strives for a better night train network across Austria and Europe. 
+
+- We are spezialized on promoting night trains (vs. day/high-speed trains)
+- We are non violent, also in our communication
+- We adopt a constructive approach: suggestions instead of mere criticism
+- We are independent from political parties and railway companies
+- We work collaboratively
+
+We work closely with other collectives such as [*Oui au train de nuit*](https://ouiautraindenuit.wordpress.com/) and [Back-on-Track](https://back-on-track.eu/), of which we represent the Austrian section.
+
+
+
+## Upcoming activities
+
+<details>
+<summary>
+<i class="bi bi-ban"> </i><i class="bi bi-airplane"></i> ***Night trains not night planes!*** On **Sunday, 13th of September**, we join Back-on-Track and Stay Grounded to organize an international Pyjama Party for a ban on night flights at airports and for the expansion of night trains. 
+</summary>
+<br>
+For the past two years, more than 220 initiatives from 15 countries affiliated with the international Network "Stay Grounded" have declared September 13th as the “International Day for the Ban on Night Flights at Airports”. In parallel, several hundreds of activists have been coming together in European cities on different dates to celebrate pyjama parties for night trains in train stations, coordinated by the European Network "Back on Track", in 2025 and 2024 also in collaboration with Stay Grounded. 
+
+This year, we are bringing these two action days together: Night trains not night planes! While we are protesting AGAINST harmful night flights, we are also showing our support FOR the already existing alternative: night trains. Let us be angry while also being joyful!
+
+Take-offs and landings during the night are an unreasonable burden with particularly harmful health consequences for all people in the vicinity of airports. They are unnecessary and avoidable. One great way to avoid them is by expanding the night train network: Night trains offer an environmentally and socially just way to travel long distances, a mode of transport that connects people and places through slower, more intentional mobility.  As the best alternative to air traffic, which must be drastically reduced for the sake of people and the planet amid intensifying climate breakdown, night trains need to expand, not disappear. 
+
+
+Curious how the action days looked in the past years?
+
+- Check out this link for last years international day for a ban on night flights: [https://stay-grounded.org/night-flghts-actions-wrap-up-2025/](https://stay-grounded.org/night-flghts-actions-wrap-up-2025/)
+- Check out this other link for an example of an international pyjama party for night trains: [https://stay-grounded.org/pyjama-party-2025/](https://stay-grounded.org/pyjama-party-2025/)
+   
+</details>
+
+
+
+## Recent activities
+
+::: {#last-activities}
+
+:::
+
+
+

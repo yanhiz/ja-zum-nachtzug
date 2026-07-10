@@ -1,0 +1,1227 @@
+# Changer de projet pour modifier ce fichier puis 'install package' dans 'build'
+
+
+## Options
+option <- function(){
+  library(ggsci)
+  options(ggplot2.discrete.colour = pal_d3()(10),
+          ggplot2.discrete.fill = pal_d3()(10))
+  options(knitr.kable.NA = 0)
+  options(mc.cores=parallel::detectCores())
+  theme_set(theme_bw(base_family = "Times New Roman",base_size=16))
+  theme_update(plot.background = element_rect(fill='white', colour=NA),
+               legend.background = element_rect(fill="transparent"),
+               axis.title = element_text(),
+               axis.text.x = element_text(size=16+0),
+               axis.text.y = element_text(size=16+0),
+               legend.position = 'top',
+               legend.direction = 'horizontal',
+               legend.box = 'vertical',
+               legend.key = element_rect(fill = "transparent"),
+               plot.title = element_text(hjust = 0,size = 16+5,vjust=0),
+               axis.line = element_line(color = NA),
+               axis.ticks = element_line(color = "black",size=.5),
+               panel.grid.major = element_line(color='black',size=.1,linetype = 2),
+               panel.grid.minor = element_line(color='black',size=.1,linetype = 0),
+               legend.box.margin = margin(0,0,-8,0),
+               legend.margin = margin(0,0,-8,0),
+               plot.margin = margin(t = 0, r = 0, b = 0, l = 0))
+}
+
+
+## Fonctions générales
+geo_mean <- function(x){
+  exp(mean(log(x)))
+}
+
+moyenne <- function (data,facteur) {
+  # Moyenne d'une variable continue
+  data%>%
+    summarise(mean=mean({{facteur}},na.rm=T),se=sd({{facteur}},na.rm=T)/sqrt(length({{facteur}})),n=length({{facteur}}))
+}
+
+round_numbers <- function(table,digits=2){
+  table %>%
+  mutate_if(is.numeric,round,digits)
+}
+
+
+binarize <- function(factor,value){
+  ifelse(factor==value,1,0)
+}
+
+logis.fct <- function(alpha,beta,variable) {
+  # Tracer la régression logistique avec les coefficients d'une régression
+  exp(alpha+beta*{{variable}})/(1+exp(alpha+beta*{{variable}}))
+}
+
+logit <- function(x) {
+  # Fonction logit: passer de p à logit(p)
+  log(x/(1-x))}
+
+
+logis <- function(x) {
+  # Fonction logistique: passer de logit(p) à p
+  plogis(x)}
+
+
+poiss <- function(k,l) {
+  # Fonction poisson: l est le paramètre de moyenne, k est le nombre de compte
+  (l^k * exp(-l)) / factorial(k)
+}
+
+
+prop <- function(data,facteur) {
+  # Proportion d'une variable binaire 0/1
+  library(PropCIs)
+  data %>%
+    summarise(prop=mean({{facteur}},na.rm=T),n=length({{facteur}}),
+              up=exactci(prop*n,n,conf.level = .95)$conf.int[2],
+              low=exactci(prop*n,n,conf.level = .95)$conf.int[1])
+}
+
+prop_n <- function(data) {
+  # Proportion d'un compte n
+  data%>%
+    mutate(prop=n/sum(n))%>%
+    ungroup()
+}
+
+
+prop_n_by <- function(data,facteur,perc=F) {
+  # Proportion d'un compte n selon un facteur
+  if (perc) {
+    data%>%
+      mutate(prop=perc(n/sum(n)),.by={{facteur}})
+  }
+  else {
+    data%>%
+      mutate(prop=n/sum(n),.by={{facteur}})
+  }
+}
+
+perc <- function(x,arr=2,acc=1,sign='%') {
+  # Pourcentage et arrondissement
+  # arr = nombre de chiffres après la virgule en format numérique
+  # acc = nombre de chiffres après la virgule en format pourcentage
+  percent(round(x,arr),accuracy=acc,suffix=sign)
+}
+
+nb_espace <- function(x,mark=' ') {
+  # Mettre un nombre avec un espace tous les 3 chiffres
+  format(x,big.mark=mark)
+}
+
+
+auto_contrast <- function(var,ref=levels(factor(var))[1],center=T){
+  # prend une colonne, la change en facteur avec ses niveaux, met le contraste en sum et nomme les colonnes du contraste
+  factor <- relevel(factor(var),ref=ref)
+  n <- length(levels(factor))
+  if (center==T){contrasts(factor) <- contr.treatment(n)-1/n}
+  if (center==F){contrasts(factor) <- contr.treatment(n)}
+  names <- levels(factor)
+  colnames(attr(factor,"contrasts")) <- str_c('_',names[2:length(names)])
+  factor
+}
+
+
+coding <- function(var,ref=levels(factor(var))[1],center=T,reduce=F){
+  factor <- relevel(factor(var),ref=ref)
+  n <- length(levels(factor))
+  names <- levels(factor)
+  contrast <- contr.treatment(n)
+  colnames(contrast) <- str_c('_',names[2:length(names)])
+  for (level in names[2:length(names)]){
+    mean <- mean(ifelse(factor==level,1,0))
+    sd <- sd(ifelse(factor==level,1,0))
+    if (center == T & reduce == T){contrast[,str_c('_',level)] <- (contrast[,str_c('_',level)]-mean)/sd}
+    if (center == T & reduce == F){contrast[,str_c('_',level)] <- (contrast[,str_c('_',level)]-mean)}
+    if (center == F & reduce == F){contrast[,str_c('_',level)] <- (contrast[,str_c('_',level)])}
+  }
+  contrasts(factor) <- contrast
+  factor
+}
+
+
+copie <- function(df, output_file = "table.html", output_dir = ".", ...) {
+  # Copie d'un tableau en format html
+  f <- tempfile(fileext =".Rmd" )
+  cat(file = f, '```{r, echo = FALSE}
+                  knitr::kable(df)
+                 ```', append = TRUE)
+  rmarkdown::render(f, output_file = output_file, output_dir = output_dir, ...)
+  unlink(f)
+  file.path(output_dir, output_file)
+  test <- output_file
+  browseURL(test)
+}
+
+
+
+wd <- function() {
+  # Workspace to source file location
+  setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
+}
+
+
+qmd2r <- function(file,doc=2) {
+  # Quarto to R
+  knitr::purl(file,documentation=doc)
+}
+
+read_ibex <- function(path,length=11,del='i'){
+  # Lire un fichier ibex
+  data <- read_csv(path,col_names = c('X')) |>
+    filter(!grepl('#',X)) |>
+    mutate(X=gsub(', ',';',X)) |>
+    separate(X,sep=',',
+             into = letters[1:length]) |>
+    mutate_all(~gsub(';',', ',.x)) |>
+    filter(!is.na(!!sym(del)))
+  return(data)
+}
+
+transmutate <- function( .data, ... ) {
+  # Supprimer les colonnes modifiées
+  library(rlang)
+  getAST <- function( ee ) { as.list(ee) %>% map_if(is.call, getAST) }
+  getSyms <- function( ee ) { getAST(ee) %>% unlist %>% map_chr(deparse) }
+
+  ## Capture the provided expressions and retrieve their symbols
+  vSyms <- enquos(...) %>% map( ~getSyms(get_expr(.x)) )
+
+  ## Identify symbols that are in common with the provided dataset
+  ## These columns are to be removed
+  vToRemove <- intersect( colnames(.data), unlist(vSyms) )
+
+  ## Pass on the expressions to mutate to do the work
+  ## Remove the identified columns from the result
+  mutate( .data, ... ) %>% select( -one_of(vToRemove) )
+}
+
+
+
+
+multiprop <- function(data,facteur,...){
+  library(DescTools)
+  # Multiproportions d'un facteur groupable
+  data%>%
+    count({{facteur}},!!!ensyms(...))%>%
+    group_by(!!!ensyms(...)) %>%
+    mutate(prop=MultinomCI(n)[,1],
+           low=MultinomCI(n)[,2],
+           up=MultinomCI(n)[,3]) %>%
+    ungroup()
+}
+
+
+sum_contrast <- function(levels=2,div=-2){
+  # Contraste de somme à 0.5 pour un facteur à deux niveaux
+  contr.sum(levels)/div
+}
+
+somme_col <- function(data) {
+  # Ajouter une ligne de total des colonnes
+  data%>%
+    bind_rows(summarise(.,
+                        across(where(is.numeric), sum),
+                        across(where(~!is.numeric(.x)), ~"Total")))
+}
+
+
+phrases_courtes <- function(data,phrases) {
+  # Récupérer les phrases les plus courtes d'une colonne
+  data%>%
+    mutate(lg=str_length({{phrases}}))%>%
+    arrange(lg)%>%
+    select(-lg)
+}
+
+
+
+## Fonctions ggplot
+
+barrederreur <- function(dodge=0,width=.1,size=.25,...) {
+  # Barre d'erreur pour les moyennes
+  limites<-aes(ymax = mean + se, ymin = mean - se)
+  geom_errorbar(limites,width = width,size=size,position = position_dodge(width=dodge),...)
+}
+
+
+interconf <- function(dodge=0,width=.1,size=.25,...) {
+  # Intervalles de confiance pour les proportions
+  geom_errorbar(aes(ymax = up, ymin = low),width = width,size=size,position = position_dodge(width=dodge),...)
+}
+
+
+
+geom_pirate <- function(mapping = NULL, data = NULL,
+                        ...,
+                        points = TRUE,
+                        bars = FALSE,
+                        lines = TRUE,
+                        cis = TRUE,
+                        violins = TRUE,
+                        points_params = list(shape = 1, size = 1),
+                        bars_params = list(alpha = 0.3, width = 0.9),
+                        lines_params = list(size = 0.5, width = 0.9),
+                        cis_params = list(fill = "white", size = 0.5,
+                                          alpha = 0.5, width = 0.8),
+                        violins_params = list(fill = "white", size = 0.5,
+                                              alpha = 0, width = 0.7),
+                        jitter_width = 0.2,
+                        na.rm = FALSE,
+                        show.legend = TRUE,
+                        inherit.aes = TRUE) {
+  # Pirate plot
+  GeomColPirate <- ggproto(
+    "GeomColPirate", GeomCol,
+
+    setup_data = function(data, params) {
+      if ("colour" %in% colnames(data)) data$colour <- NULL
+      GeomCol$setup_data(data, params)
+    }
+  )
+
+  StatCI <- ggproto(
+    "StatCI", Stat,
+
+    compute_group = function(data, scales) {
+      data %>%
+        dplyr::summarise(mean_y = mean(y, na.rm = TRUE),
+                         sem_y = sd(y, na.rm = TRUE) / sqrt(dplyr::n())) %>%
+        dplyr::mutate(y = mean_y, height = sem_y * 1.96 * 2)
+    },
+
+    finish_layer = function(data, params) {
+      data %>% dplyr::mutate(colour = "darkgrey")
+    }
+
+  )
+
+  StatYdensityPirate <- ggproto(
+    "StatYdensityPirate", StatYdensity,
+
+    finish_layer = function(data, params) {
+      data %>% dplyr::mutate(colour = "darkgrey")
+    }
+  )
+
+  GeomCrossbarPirate <- ggproto(
+    "GeomCrossbarPirate", GeomCrossbar,
+    draw_key = draw_key_path
+  )
+
+  update_default_arg <- function(arg_name, arg_value) {
+    default_vals <- as.list(formals(geom_pirate)[[arg_name]])[-1]
+    utils::modifyList(default_vals, arg_value)
+  }
+
+  layers <- c()
+
+  if (bars) {
+    bars_params <- update_default_arg("bars_params", bars_params)
+    bars_layer <- layer(
+      data = data,
+      mapping = mapping,
+      stat = "summary",
+      geom = GeomColPirate,
+      position = position_dodge(width = 0.9),
+      show.legend = show.legend,
+      inherit.aes = inherit.aes,
+      params = purrr::flatten(list(
+        bars_params,
+        list(
+          fun = "mean",
+          na.rm = na.rm,
+          ...
+        )
+      ))
+    )
+    layers <- c(layers, bars_layer)
+  }
+
+  if (violins) {
+    violins_params <- update_default_arg("violins_params", violins_params)
+    violin_layer <- layer(
+      data = data,
+      mapping = mapping,
+      stat = StatYdensityPirate,
+      geom = GeomViolin,
+      position = position_dodge(width = 0.9),
+      show.legend = FALSE,
+      inherit.aes = inherit.aes,
+      params = purrr::flatten(list(
+        violins_params,
+        list(
+          na.rm = na.rm,
+          ...
+        )
+      ))
+    )
+    layers <- c(layers, violin_layer)
+  }
+
+  if (cis) {
+    cis_params <- update_default_arg("cis_params", cis_params)
+    cis_layer <- layer(
+      data = data,
+      mapping = mapping,
+      stat = StatCI,
+      geom = "tile",
+      position = position_dodge(width = 0.9),
+      show.legend = FALSE,
+      inherit.aes = inherit.aes,
+      params = purrr::flatten(list(
+        cis_params,
+        list(
+          na.rm = na.rm,
+          ...
+        )
+      ))
+    )
+    layers <- c(layers, cis_layer)
+  }
+
+  if (lines) {
+    lines_params <- update_default_arg("lines_params", lines_params)
+    lines_layer <- layer(
+      data = data,
+      mapping = mapping,
+      stat = "summary",
+      geom = GeomCrossbarPirate,
+      position = position_dodge(width = 0.9),
+      show.legend = show.legend,
+      inherit.aes = inherit.aes,
+      params = purrr::flatten(list(
+        lines_params,
+        list(
+          fun = "mean",
+          na.rm = na.rm,
+          ...
+        )
+      ))
+    )
+    layers <- c(layers, lines_layer)
+  }
+
+  if (points) {
+    points_params <- update_default_arg("points_params", points_params)
+    points_layer <- layer(
+      data = data,
+      mapping = mapping,
+      stat = "identity",
+      geom = GeomPoint,
+      position = position_jitterdodge(jitter.width = jitter_width,
+                                      jitter.height = 0,
+                                      dodge.width = 0.9),
+      show.legend = show.legend,
+      inherit.aes = inherit.aes,
+      params = purrr::flatten(list(
+        points_params,
+        list(
+          na.rm = na.rm,
+          ...
+        )
+      ))
+    )
+    layers <- c(layers, points_layer)
+  }
+
+  return(layers)
+
+}
+
+
+# Theme
+them <- function(legend_position='top',legend_direction='horizontal',legend_box='vertical',
+                 top=0,right=0,bottom=-8,left=0,
+                 police="Times New Roman",base_size=16,marges=0,
+                 title_align=0,title_size=-3,title_height=0,axis_size=0,
+                 gmajcol='black',gmincol='black',gmajsize=.1,gminsize=.1,gmaj=2,gmin=0
+                 )  {
+  theme_bw(base_family = police,base_size=base_size)+
+    theme(plot.background = element_rect(fill='white', colour=NA),
+          legend.background = element_rect(fill="transparent"),
+          axis.title = element_text(),
+          axis.text.x = element_text(size=base_size+axis_size),
+          axis.text.y = element_text(size=base_size+axis_size),
+          legend.position = legend_position,
+          legend.box = legend_box,
+          legend.direction=legend_direction,
+          legend.key = element_rect(fill = "transparent"),
+          plot.title = element_text(hjust = title_align,size = base_size+title_size,vjust=title_height),
+          axis.line = element_line(color = NA),
+          axis.ticks = element_line(color = "black",size=.5),
+          panel.grid.major = element_line(color=gmajcol,size=gmajsize,linetype = gmaj),
+          panel.grid.minor = element_line(color=gmincol,size=gminsize,linetype = gmin),
+          legend.box.margin = margin(top,right,bottom,left),
+          legend.margin = margin(top,right,bottom,left),
+          plot.margin = margin(t = marges, r = marges, b = marges, l = marges))
+}
+
+
+
+### Couleurs
+rose <- '#F8766D'
+cyan <- '#00BFC7'
+vert <- '#00BA38'
+rouge <- '#FC4E07'
+bleu <- '#619CFF'
+bleuclair <- '#64B5F6'
+bleufonce <- '#4285f4'
+orange <- '#ffab40'
+orangeclair <- '#FF8A65'
+orangefonce <- '#ef6c00'
+gris <- 'grey80'
+gris_latex <- 'gray!20'
+
+# Colorer du texte
+colorize <- function(x, color, bold='y') {
+  if (knitr::is_latex_output()) {
+    sprintf("\\textcolor{%s}{%s}", color, x)
+  }
+  else if (knitr::is_html_output()) {
+    if (bold=='y') {
+      sprintf("<span style='color: %s;'><b>%s</b></span>", color,x)}
+    else {
+      sprintf("<span style='color: %s;'>%s</span>", color,x)}
+  }
+  else x
+}
+
+### Polices
+tnr = 'Times New Roman'
+
+
+
+## Modèles fréquentistes
+
+# Régression logisitique
+logistic <- function(data, formula) {
+  glmer({{formula}} , data=data, family = "binomial",  control = glmerControl(optimizer = "optimx", calc.derivs = FALSE, optCtrl = list(method = "nlminb", starttests = FALSE, kkt = FALSE)))
+  #contrasts = list(Facteur=MASS::contr.sdif)
+}
+
+# Régression ordinale
+ordinal <- function(data, formula) {
+  clmm({{formula}} , data=data)
+}
+
+# Collinéarité d'un modèle : nombre de condition κ
+fct_collin <- function(fit){
+  if (class(fit) == "lmerMod" || class(fit) == "glmerMod"){
+    data <- getME(fit, "X")[,-1]
+    colvector <- 1:ncol(data)
+    std.fnc <- function(vec) (vec - mean(vec))/sqrt(var(vec))
+    scale.fnc <- function(vec) (vec/sqrt(as.vector(t(vec) %*% vec)))
+    x = data[, colvector]
+    xlengte = length(x[, 1])
+    colnames = dimnames(x)[[2]]
+    onevec = rep(1, xlengte)
+    Xdesign = cbind(onevec, as.matrix(x))
+    X = Xdesign
+    ncols = length(X[1, ])
+    for (i in 1:ncols) {
+      X[, i] = scale.fnc(as.numeric(X[, i]))
+    }
+    svd.X = svd(X, nu = 0)
+    nu.X = max(svd.X$d)/svd.X$d
+    kappa.X = max(nu.X)
+    pi.X = svd.X$v
+    for (i in (1:length(svd.X$d))) {
+      pi.X[, i] = svd.X$v[, i]/svd.X$d[i]
+      pi.X[, i] = pi.X[, i]^2
+    }
+    for (i in 1:length(svd.X$d)) {
+      pi.X[i, ] = pi.X[i, ]/sum(pi.X[i, ])
+    }
+    pi.X = t(pi.X)
+    pi.X = as.data.frame(pi.X)
+    dimnames(pi.X)[[2]] = c("Constant", colnames)
+    return(list(svd = svd.X, cindex = nu.X, cnumber = kappa.X, pi = pi.X))
+  }
+  else stop("model not a merMod object")
+}
+
+
+# Aire sous la courbe ROC (AUC)
+fct_roc <- function(obs,pred) {
+  roc(obs,pred,plot=TRUE,legacy.axes=TRUE,print.auc=TRUE)
+}
+
+
+# Exactitude en validation croisée répétée pour une régréssion logistique
+fct_accuracy <- function(data,formula) {
+  print(train({{formula}},
+              data = data,
+              method = "glm",
+              family = "binomial",
+              trControl = trainControl(method = "repeatedcv",number = 10, repeats = 100),
+              na.action = na.pass))
+}
+
+
+# Exactitude en probabilités
+fct_acctable <-function (x, data, method = "cut", where = seq(0, 1, by = 0.1),
+                           scalesize = NA, ...)
+{
+  requireNamespace("lme4", quietly = TRUE)
+  requireNamespace("rms", quietly = TRUE)
+  if (class(x)[1] == "glmerMod") {
+    y = attr(x@frame, "terms")
+    depvar = names(attr(stats::terms(y), "dataClasses")[attr(stats::terms(y),
+                                                             "response")])
+    probs = stats::fitted(x)
+  }
+  else {
+    if (class(x)[1] == "lrm") {
+      depvar = as.character(stats::formula(x$call))[2]
+      probs = stats::predict(x, type = "fitted")
+    }
+    else {
+      stop("first argument is not an lmer or lrm model")
+    }
+  }
+  if (method == "cut") {
+    classes = Hmisc::cut2(probs, where, levels.mean = TRUE)
+    classCounts = table(classes)
+    means = tapply(as.numeric(data[, depvar]) - 1, classes,
+                   mean)
+    means = means[!is.na(means)]
+  }
+  else {
+    if (method == "shingle") {
+      sh = lattice::equal.count(probs)
+      means = rep(0, length(levels(sh)))
+      midpoints = rep(0, length(means))
+      for (i in 1:length(levels(sh))) {
+        means[i] = mean(probs[probs > levels(sh)[[i]][1] &
+                                probs < levels(sh)[[i]][2]])
+        midpoints[i] = as.character(mean(levels(sh)[[i]]))
+      }
+      names(means) = as.character(midpoints)
+    }
+  }
+  #   graphics::plot(as.numeric(names(means)), means, xlab = "mean predicted probabilities",
+  #                  ylab = "observed proportions", type = "n")
+  #   graphics::abline(0, 1, col = "grey")
+  #   if ((method == "cut") & (!is.na(scalesize))) {
+  #     graphics::symbols(as.numeric(names(means)), as.numeric(means),
+  #                       circles = as.numeric(classCounts), inches = scalesize,
+  #                       main = " ", add = T)
+  #   }
+  #   else {
+  #     graphics::points(as.numeric(names(means)), means)
+  #   }
+  #   graphics::mtext(paste("R-squared: ", round(stats::cor(as.numeric(names(means)),
+  #                                                         means)^2, 2), sep = ""), 3, 1.5)
+  # }
+  return(cbind(classCounts%>%as.data.frame()%>%filter(Freq!=0)%>%rename(pred='classes',nb='Freq'),means%>%as.data.frame()%>%rename(obs='.')%>%select(obs))%>%
+           mutate_all(~as.numeric(as.character(.x))))
+  # df <- rbind(names(means), means,classCounts)
+  # colnames(df) <- c(1:dim(df)[2])
+  # df%>%
+  #   as.data.frame(row.names = c('pred','obs','nb'))%>%
+  #   t()%>%as.data.frame()%>%
+  #   mutate_all(~as.numeric(as.character(.x)))
+  #
+}
+
+
+
+# R-carré de la table d'exactitude
+fct_rcarre <- function(col=rose,texte='R-squared : ',x=.1,y=.9,size=4.75,family="serif") {
+  list(geom_segment(x = 0, xend = 1, y = 0, yend = 1,col=col),
+       annotate("text",label=paste(texte, round(stats::cor(t$obs, t$pred)^2, 2)),x=x,y=y,family=family,size=size))
+}
+
+
+# Présentation d'un modèle fréquentiste
+presentation <- function(model,lignes,arr=2,arr.p=4,Sig=F) {
+  summary(model)%>%
+    coef()%>%data.frame(row.names=lignes)%>%
+    rename(Coefficient='Estimate',`Erreur standard`='Std..Error',`z-value`='z.value',`p-value`='Pr...z..')%>%
+    mutate(Seuil=case_when(`p-value`<0.001~'<0.001', `p-value`<0.01~'<0.01',`p-value`<0.05~'<0.05',`p-value`>=0.05~'>0.05'))%>%
+    mutate(Sig=case_when(`p-value`<0.001~'***', `p-value`<0.01~'**',`p-value`<0.05~'*',`p-value`<0.1~'.',`p-value`>=0.1~''))%>%
+    mutate(across(c(Coefficient,`Erreur standard`,`z-value`),~round(.x,arr)))%>%
+    mutate(across(c(`p-value`),~round(.x,arr.p)))-> tableau
+  if (Sig==F) {
+    tableau %>% select(-Sig)
+  }
+  else {tableau}
+}
+
+# Tableau des effets aléatoires d'un modèle
+
+fct_randomeffects <- function(model,arrondi=2) {
+  VarCorr(model)%>%
+    as.data.frame()%>%
+    select(-starts_with('v'))%>%
+    mutate(Nombre=summary(model)[["ngrps"]])%>%
+    mutate(`Écart-type`=round(sdcor,arrondi))%>%
+    select(-sdcor)%>%
+    rename(Groupe=grp)
+}
+
+## Récupérer les valeurs de contraste d'une liste de vecteurs
+
+take_values <- function(list){
+  for (vector in list) {
+    contrast <- contrasts(vector)
+    for (value in row.names(contrast)){
+      assign(value,contrast[value,],envir = .GlobalEnv)
+    }
+  }
+}
+
+
+## Modèles bayésiens
+
+select_model <- function(model,...){
+  if (missing(...)){
+    model %>%
+      data.frame() %>%
+      select(starts_with('b'))
+  } else {
+    model %>%
+      data.frame() %>%
+      select(...)
+  }
+}
+
+pivot_model <- function(model,pref='b_'){
+  # Inverse les noms des colonnes et les valeurs
+  model %>%
+    pivot_longer(everything(),names_to = 'parameter',values_to = 'estimate',names_ptypes = factor(),names_prefix = pref)
+}
+
+
+summarize_model <- function(model,...,m=median,rounding=2,ci=F,ci_sep='; '){
+  model %>%
+    summarise(e=m(estimate),
+              low=ci(estimate)[[2]],
+              up=ci(estimate)[[3]],
+              p=max(mean(estimate>0),mean(estimate<0)),
+              ...,
+              .by = parameter
+    ) %>%
+    mutate_if(is.numeric,round,rounding) -> model
+  if (ci){
+    model %>%
+      transmutate(ci=str_c('[',low,ci_sep,up,']'),.before=low) -> model
+  }
+  model
+}
+
+parameters <- function(model,parameters=model$parameter){
+  model %>%
+    rename(old=parameter) %>%
+    mutate(parameter=parameters,.after=old)
+}
+
+lines_model <- function(model,format='html'){
+  if (format=='html'){
+    model %>%
+      mutate(parameter=str_c('<i>&beta;</i><sub>',parameter,'</sub>')) %>%
+      reframe(lines=str_c('(','E(',parameter,') = ',e,', CrI = ',ci,', <i>pd</i> = ',p,')',collapse = '<br>')) %>%
+      pull(lines) %>%
+      print_html()
+  }
+  if (format=='latex'){
+    model %>%
+      mutate(parameter=str_c('$\\beta_\\mathrm{',parameter,'}$')) %>%
+      reframe(lines=str_c('(','$\\mathbb{E}$(',parameter,') = ',e,', CrI = ',ci,', \\textit{pd} = ',p,')',collapse = '\n')) %>%
+      pull(lines) %>%
+      writeLines()
+  }
+}
+
+
+
+# Liste des postérieurs
+listposts <- function(model,sel='b_') {
+  data.frame(model)%>%
+    select(starts_with(sel))%>%
+    pivot_longer(cols=everything(),
+                 names_prefix = sel,
+                 names_ptypes = factor(),
+                 names_to = "parameter",
+                 values_to = "estimate")
+}
+
+# Résumé des postérieurs
+sumposts <- function(model,sel='b_',fixed=T){
+  posterior_summary(model)%>%
+    data.frame()%>%
+    rownames_to_column(var='parameter')%>%
+    filter(grepl(sel,parameter,fixed=fixed))%>%
+    mutate(parameter=gsub(sel,'',parameter,fixed=fixed))%>%
+    rename(mean=Estimate,sd=Est.Error,low=Q2.5,up=Q97.5)}
+
+# Plot des postérieurs
+plotposts <- function(model,sel='b_',facteurs='all') {
+  if ('all'%in%facteurs) {
+    listposts(model,sel)%>%
+      ggplot(aes(x=estimate))+facet_wrap(~parameter)+
+      geom_density(fill='steelblue',col='steelblue',alpha=.7)+
+      geom_vline(xintercept = 0,linetype='dashed')
+  } else {
+    listposts(model,sel)%>%
+      filter(parameter%in%facteurs)%>%
+      ggplot(aes(x=estimate))+facet_wrap(~parameter)+
+      geom_density(fill='steelblue',col='steelblue',alpha=.7)+
+      geom_vline(xintercept = 0,linetype='dashed')
+  }
+}
+
+# Modèle brms
+fct_brm <- function(formula,data,family,priors= set_prior('normal(0,1)',class='b'),control=F,adapt_delta=.99,max_treedepth=12,chains=4,iter=4000,warmup=iter/2) {
+  if (control == F){controles <- NULL}
+  if (control == T){controles <- controles <- list(adapt_delta = adapt_delta, max_treedepth = max_treedepth)}
+
+  model <- brm(formula = {{formula}},
+               data = data,
+               family=family,
+               # Paramètres Bayes
+               control = controles,
+               prior = priors,
+               # Paramètres MCMC
+               chains = chains,
+               iter = iter,
+               warmup = warmup,
+               seed = 100)
+
+  return(model)
+}
+
+esperance <- function(t,e,fun=logis) {
+  F <- fun
+  res = c()
+  for (i in 1:length(t)) {
+    if (i == 1) {res = c(res,F(t[i]-e))}
+    else {res = c(res,F(t[i]-e)-F(t[i-1]-e))}
+    if (i == length(t)) {res = c(res,1-F(t[i]-e))}
+  }
+  sum(res*seq(1,length(t)+1,1))
+}
+
+
+## Print en HTML
+print_html <- function(text){
+dir <- tempfile()
+dir.create(dir)
+htmlFile <- file.path(dir, "index.html")
+writeLines(text, con = htmlFile)
+rstudioapi::viewer(htmlFile)
+}
+
+
+## OT stochastique
+# Ouvrir une grammaire
+opengram <- function(path){
+  read_delim(path,skip=6,delim=' ',col_names = str_c('c',seq(1,8))) %>%
+    select(c3,c4) %>%
+    rename(constraint=c3,rank=c4) %>%
+    drop_na() %>%
+    mutate(rank=as.numeric(rank)) %>%
+    filter(!(rank<10&rank>-10)) %>%
+    mutate(weight=rank-min(rank)+1)
+}
+
+
+
+
+
+# Ouvrir une distribution
+opendistrib <- function(path,div=1000){
+  read_delim(path,skip=5,delim = '=',col_names = c('name','value')) %>%
+    drop_na() %>%
+    pivot_wider(names_from = 'name',values_from = 'value') %>%
+    unnest_longer(everything()) %>%
+    rename(input=1,output=2,weight=3) %>%
+    mutate(across(everything(),~str_remove_all(.x,'[ "\\\\]'))) %>%
+    mutate(weight=as.numeric(weight)/div)
+}
+
+# Convertir des jugements en proportions
+j2p <- function(x,k=0.2) {1/(1+k^x)}
+p2j <- function(x,k=0.2) {(log((1/x)-1))/(log(k))}
+
+# Obtenir le ranking d'une grammaire
+get_ranking <- function(data){
+  data %>%
+    arrange(desc(rank),.by_group = T) %>%
+    summarise(ranking=str_c(constraint,collapse = ' >> '))
+}
+
+
+# Plotter une grammaire
+plotgram <- function(gram,h.graph=.3,h.label=.199,sigma=2,y.label=.0259,largeur=15,force=2.55,axissize=20,titre=NULL,labelsize=7) {
+  p <- ggplot(data=gram, aes(x = case_when(Rang==max(Rang)~Rang+largeur,Rang==min(Rang)~Rang-largeur,TRUE~Rang))) +
+    geom_text_repel(aes(label=Contrainte,x=Rang,y=h.label),size=labelsize,family = "Times New Roman",nudge_y = y.label,force=force,seed=0)+
+    scale_y_continuous(lim=c(0,h.graph),name='',expand=c(.02,0))+
+    scale_x_reverse(name='Constraint ranking',breaks=c(min(gram$Rang)-largeur,max(gram$Rang)+largeur),
+                    labels=c('Soft','Hard'))+
+    theme(panel.background = element_rect(fill = "white"),
+          axis.text.y=element_blank(), axis.ticks.y=element_blank(),axis.ticks.x=element_blank(),
+          axis.line.x = element_line(arrow = grid::arrow(length = unit(0.3, "cm"), ends = "both")),
+          axis.text.x=element_text(size=axissize,family="Times New Roman"),axis.title=element_text(size=axissize+3,family="Times New Roman"),
+          plot.title = element_text(size=axissize+3,family='Times New Roman',hjust=.5))+
+    ggtitle(titre)
+  for (x in gram$Rang) {
+    p <- p+  stat_function(fun = dnorm, args = list(x, sigma))
+  }
+  p
+}
+
+
+
+
+## Correlation
+
+# Corrélation dans un modèle
+corr.model <- function(model) {
+  as.matrix(cov2cor(vcov(model)))
+}
+
+# Corrélation dans des données
+corr.data <- function(data,...) {
+  data%>%select(!!!ensyms(...))%>%cor(use='complete.obs')
+}
+
+
+# Test de significativité des corrélations
+corr.test <- function(mat, ...) {
+  mat <- as.matrix(mat)
+  n <- ncol(mat)
+  p.mat<- matrix(NA, n, n)
+  diag(p.mat) <- 0
+  for (i in 1:(n - 1)) {
+    for (j in (i + 1):n) {
+      tmp <- cor.test(mat[, i], mat[, j], ...)
+      p.mat[i, j] <- p.mat[j, i] <- tmp$p.value
+    }
+  }
+  colnames(p.mat) <- rownames(p.mat) <- colnames(mat)
+  p.mat
+}
+
+
+# Plotter les corrélations
+corr.plot <- function(corr) {
+  corrplot(corr,order="hclust",p.mat = corr.test(corr), sig.level = 0.01,method = 'square',diag=F, type = 'lower')
+  # method = number circle shade color square ellipse pie
+  # addrect = chiffre, pour hierarchical clustering
+  # type = upper lower
+  # nombre : addCoef.col = 'black'
+}
+
+
+# Ressources lexicales
+flexique_anim <- function() {
+  return(read_csv('/home/yanis/Bureau/Travaux/These/Projet biais crossling/data/dict/flexique-animeite.csv')%>%unique())
+}
+lexique383 <- function(){
+  read_tsv('/home/yanis/Bureau/Travaux/These/Corpus/lexique383.tsv')}
+
+
+
+### Hors d'usage
+# # charger tidyverse
+# tidyverse <- function(){
+#   library(dplyr)
+#   library(readr)
+#   library(tibble)
+#   library(tidyr)
+#   library(ggplot2)
+#   library(forcats)
+#   library(stringr)
+#   library(purrr)
+# }
+#
+# propdiff <- function(data,...,facteur,val1,val2) {
+#   # Différence de proportion
+#   data%>%
+#     select(-up,-low)%>%
+#     group_by(!!!ensyms(...))%>%
+#     pivot_wider(names_from = {{facteur}},values_from = c(mean,n))%>%
+#     summarise(diff=!!sym(paste('mean_',val1,sep=''))-!!sym(paste('mean_',val2,sep='')),
+#               up = diffscoreci(
+#                 !!sym(paste('mean_',val1,sep=''))*!!sym(paste('n_',val1,sep='')), !!sym(paste('n_',val1,sep='')),
+#                 !!sym(paste('mean_',val2,sep=''))*!!sym(paste('n_',val2,sep='')), !!sym(paste('n_',val2,sep='')),
+#                 conf.level = .95)$conf.int[2],
+#               low = diffscoreci(
+#                 !!sym(paste('mean_',val1,sep=''))*!!sym(paste('n_',val1,sep='')),
+#                 !!sym(paste('n_',val1,sep='')),
+#                 !!sym(paste('mean_',val2,sep=''))*!!sym(paste('n_',val2,sep='')), !!sym(paste('n_',val2,sep='')),
+#                 conf.level = .95)$conf.int[1],
+#               n = !!sym(paste('n_',val1,sep='')) +  !!sym(paste('n_',val2,sep=''))) %>%
+#     ungroup()
+# }
+#
+# # Lignes
+# lignes <- function(x=0){
+#   list(geom_line(size=1.4,position = position_dodge(x)),
+#        geom_point(size=3,position = position_dodge(x)))
+# }
+#
+# # Colonnes
+# colonnes <- function(cat1,cat2,col1=rose,col2=cyan,titre='',...) {
+#   list(geom_col(aes(y=1,col=cat2),fill=col2,...),
+#        geom_col(aes(y=mean,col=cat1),fill=col1,...),
+#        scale_color_manual(name=titre,values=c('transparent','transparent'),labels=c(cat2,cat1)),
+#        guides(color = guide_legend(override.aes = list(fill = c(col2,col1)))),
+#        scale_y_continuous(name=NULL,label=percent))
+# }
+# Label data
+# labeldata <- function(arrondi=1,taille=4.5,police="Times New Roman",...) {
+#   list(geom_text(aes(y=mean/2,label=percent(mean,arrondi)),family = police,size=taille,...),
+#        geom_text(aes(y=mean+(1-mean)/2,label=percent(1-mean,arrondi)),family = police,size=taille,...))
+# }
+#
+#
+# # Présentation latex des modèles Bayésien
+# bayes2latex <- function(model,lignes,align='lcclc',sel='b_',fixed=T) {
+#   sumposts(model,sel = sel, fixed = fixed)-> tab
+#   tab %>% pull(parameter) -> parameters
+#
+#   p <- c()
+#   for (parameter in parameters) {
+#     p <- c(p,
+#            hypothesis(model, str_c(parameter, '>0'))$hypothesis[7] %>% pull())
+#   }
+#   tab %>%
+#     mutate(p = p)%>%
+#     mutate_if(is.numeric,~round(.x,2))%>%
+#     mutate(CrI = str_c('$[',as.character(low),'; ',as.character(up),']$')) %>%
+#     relocate(CrI,.after = se)%>%
+#     select(-c(low, up)) %>%
+#     mutate_if(is.numeric,~str_c('$',as.character(.x),'$'))%>%
+#     rename(`$E(\\beta)$`=mean,
+#            `Standard error`=se,
+#            `95\\% CrI`=CrI,
+#            `$P(\\beta>0)$`=p)%>%
+#     mutate(parameter = str_c('$\\beta_{',lignes,'}$')) %>%
+#     rename(`Parameter $\\beta$` = parameter)%>%
+#     kable('latex',booktabs = T,escape = F,align = align)
+# }
+#
+# # Ligne de résultat en latex
+# bayes2line <- function(model,ligne) {
+#   sumposts(model) -> tab
+#   tab %>% pull(parameter) -> parameters
+#   p <- c()
+#   for (parameter in parameters) {
+#     p <- c(p,
+#            hypothesis(model, str_c(parameter, '>0'))$hypothesis[7] %>% pull())
+#   }
+#   sumposts(model)%>%
+#     mutate(p=p)%>%
+#     filter(grepl(ligne,parameter))%>%
+#     mutate(parameter=gsub('([A-Z])','-\\1',parameter),
+#            parameter=gsub('^[^-]*-','',parameter),
+#            parameter=gsub(':[^-]*-',':',parameter))%>%
+#     mutate_if(is.numeric,~round(.x,2))%>%
+#     summarise(lignes=str_c('($E(\beta_{',
+#                            parameter,
+#                            '}) = ',
+#                            as.character(mean),
+#                            '$; 95\apercent CrI $= [',
+#                            as.character(low),
+#                            '; ',
+#                            as.character(up),
+#                            '$]; $P(\beta_{',
+#                            parameter,
+#                            '}>0)=',
+#                            as.character(p),
+#                            '$)'))
+# }
+#
+#
+# # Bayes to Line html
+#
+# b2l_html <- function(hypothesis){
+#   hypothesis%>%
+#     mutate_if(is.numeric,~round(.x,2))%>%
+#     transmute(hyp=Hypothesis,ligne=str_c('Ε(β)=',Estimate,', 95%CrI = [',CI.Lower,';',CI.Upper,'], P(β<0) = ',Post.Prob))
+# }
+#
+# # Bayes to Table html
+#
+# b2t_html <- function(hypothesis,lignes){
+#   mutate_if(is.numeric,~round(.x,2))%>%
+#     transmute(β=lignes,
+#               `E(β)`=Estimate,
+#               CI=str_c('[',as.character(CI.Lower),';',as.character(CI.Upper),']'),
+#               `P(β<0)`=Post.Prob)
+# }
+# # sumposts <- function(model,sel='b_',cal='quantile') {
+# #   listposts(model,sel)%>%
+# #     group_by(parameter)-> liste
+# #   if (cal=='quantile') {
+# #   liste%>%
+# #     summarise(mean = mean(estimate),
+# #               se = sd(estimate),
+# #               low = quantile(estimate,0.025),
+# #               up = quantile(estimate,0.975)) }
+# #   else {
+# #     library(HDInterval)
+# #     liste%>%
+# #       summarise(mean = mean(estimate),
+# #                 se = sd(estimate),
+# #                 low = hdi(estimate)[1],
+# #                 up = hdi(estimate)[2])
+# #   }
+# # }
+
+# Présentation latex des modèles Bayésien
+# bayes2latex <- function(model,lignes,align='lcclc',sel='b_',fixed=T) {
+#   sumposts(model,sel = sel, fixed = fixed)-> tab
+#   tab %>% pull(parameter) -> parameters
+#
+#   p <- c()
+#   for (parameter in parameters) {
+#     p <- c(p,
+#            hypothesis(model, str_c(parameter, '>0'))$hypothesis[7] %>% pull())
+#   }
+#   tab %>%
+#     mutate(p = p)%>%
+#     mutate_if(is.numeric,~round(.x,2))%>%
+#     mutate(CrI = str_c('$[',as.character(low),'; ',as.character(up),']$')) %>%
+#     relocate(CrI,.after = se)%>%
+#     select(-c(low, up)) %>%
+#     mutate_if(is.numeric,~str_c('$',as.character(.x),'$'))%>%
+#     rename(`$E(\\beta)$`=mean,
+#            `Standard error`=se,
+#            `95\\% CrI`=CrI,
+#            `$P(\\beta>0)$`=p)%>%
+#     mutate(parameter = str_c('$\\beta_{',lignes,'}$')) %>%
+#     rename(`Parameter $\\beta$` = parameter)%>%
+#     kable('latex',booktabs = T,escape = F,align = align)
+# }
+#
+# # Ligne de résultat en latex
+# bayes2line <- function(model,ligne) {
+#   sumposts(model) -> tab
+#   tab %>% pull(parameter) -> parameters
+#   p <- c()
+#   for (parameter in parameters) {
+#     p <- c(p,
+#            hypothesis(model, str_c(parameter, '>0'))$hypothesis[7] %>% pull())
+#   }
+#   sumposts(model)%>%
+#     mutate(p=p)%>%
+#     filter(grepl(ligne,parameter))%>%
+#     mutate(parameter=gsub('([A-Z])','-\\1',parameter),
+#            parameter=gsub('^[^-]*-','',parameter),
+#            parameter=gsub(':[^-]*-',':',parameter))%>%
+#     mutate_if(is.numeric,~round(.x,2))%>%
+#     summarise(lignes=str_c('($E(\beta_{',
+#                            parameter,
+#                            '}) = ',
+#                            as.character(mean),
+#                            '$; 95\apercent CrI $= [',
+#                            as.character(low),
+#                            '; ',
+#                            as.character(up),
+#                            '$]; $P(\beta_{',
+#                            parameter,
+#                            '}>0)=',
+#                            as.character(p),
+#                            '$)'))
+# }
+#
+#
+# # Bayes to Line html
+#
+# b2l_html <- function(hypothesis){
+#   hypothesis%>%
+#     mutate_if(is.numeric,~round(.x,2))%>%
+#     transmute(hyp=Hypothesis,ligne=str_c('Ε(β)=',Estimate,', 95%CrI = [',CI.Lower,';',CI.Upper,'], P(β<0) = ',Post.Prob))
+# }
+#
+# # Bayes to Table html
+#
+# b2t_html <- function(hypothesis,lignes){
+#   mutate_if(is.numeric,~round(.x,2))%>%
+#     transmute(β=lignes,
+#               `E(β)`=Estimate,
+#               CI=str_c('[',as.character(CI.Lower),';',as.character(CI.Upper),']'),
+#               `P(β<0)`=Post.Prob)
+# }
+# sumposts <- function(model,sel='b_',cal='quantile') {
+#   listposts(model,sel)%>%
+#     group_by(parameter)-> liste
+#   if (cal=='quantile') {
+#   liste%>%
+#     summarise(mean = mean(estimate),
+#               se = sd(estimate),
+#               low = quantile(estimate,0.025),
+#               up = quantile(estimate,0.975)) }
+#   else {
+#     library(HDInterval)
+#     liste%>%
+#       summarise(mean = mean(estimate),
+#                 se = sd(estimate),
+#                 low = hdi(estimate)[1],
+#                 up = hdi(estimate)[2])
+#   }
+# }
+# obtenir les priors pour chaque effet fixe
+# coefs <- get_prior({{formula}},data=data)%>%
+#   tibble()%>%
+#   filter(coef!="",coef!='Intercept')%>%
+#   pull(coef)%>%
+#   unique()
+# priors <- c(set_prior(prior, class = "b", coef = ""))
+# for (coef in coefs) {
+#   priors <- c(priors, set_prior(prior, class = "b", coef = coef))
+# }
+# priors <- priors[-1,]
+# # ouvregram <-function(chemin) {
+#   read_table(chemin,col_names = FALSE)%>%
+#     select(X3,X4)%>%filter(!is.na(X3),X3!='=',!is.na(X4),as.numeric(X4)>2)%>%
+#     mutate(X3=gsub('\"','',X3))%>%
+#     rename(Contrainte='X3',Rang='X4')%>%
+#     mutate(Rang=as.numeric(Rang))
+# }
+# # Différence entre contraintes
+# distance <- function(gram,C1,C2) {
+#   gram%>%
+#     filter(Contrainte==C1|Contrainte==C2)%>%
+#     pivot_wider(names_from = Contrainte,values_from = Rang)%>%
+#     rename(c1=C1,c2=C2)%>%
+#     mutate(diff=c1-c2)%>%
+#     select(diff)
+# }
+#
+# # Sélections des valeurs d'une distribution
+# val <- function(dis,condition,output='actif') {
+#   dis%>%
+#     filter(input==condition)%>%select(output)%>%
+#     rename(prop=output)
+# }
+# ouvredistrib <- function(chemin,division=100000) {
+#   distrib <- read_table(chemin, col_names = FALSE, skip = 5)
+#
+#   distrib <-  distrib%>%mutate(index=1:nrow(distrib))%>%
+#     mutate(X3=gsub("\"","",X3))
+#
+#   actif <-distrib%>%
+#     filter(grepl("actif",X3,fixed=T))%>%mutate(index=index+1)%>%
+#     pull(index)
+#
+#   passif <-distrib%>%
+#     filter(grepl("passif",X3,fixed=T))%>%mutate(index=index+1)%>%
+#     pull(index)
+#
+#   rbind(
+#     cbind(distrib%>%filter(X1=='string1')%>%select(X3)%>%rename(input='X3')%>%select(input)%>%unique(),
+#           distrib%>%filter(index %in% actif)%>%
+#             mutate(Voix='actif',prop=as.numeric(X3)/division)%>%select(Voix,prop)),cbind(distrib%>%filter(X1=='string1')%>%select(X3)%>%rename(input='X3')%>%select(input)%>%unique(),
+#                                                                                          distrib%>%filter(index %in% passif)%>%
+#                                                                                            mutate(Voix='passif',prop=as.numeric(X3)/division)%>%select(Voix,prop)))%>%
+#     pivot_wider(names_from = Voix,values_from = prop)
+#
+# }

@@ -1,0 +1,30 @@
+logo: 
+  images:
+    icon: logos/small_logo.png
+    header: logos/large_logo.png
+    header-white: logos/large_logo-white.jpg
+  small: icon
+  large: header
+
+color:
+  palette:
+    black: "#1D1E33"
+    blue: "#2271B3"
+    grey: "#F1F3F6"
+    darkgreen: "#20603D"
+    green: "#008F39"
+    lightgreen: "#92D051"
+    yellow: "#EAF044"
+  background: grey
+  primary: blue
+  secondary: green
+
+typography:
+  base: 
+    family: Mark Pro
+  link: 
+    color: green
+  headings:
+    family: Mark Pro
+    weight: 400
+    color: blue

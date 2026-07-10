@@ -1,0 +1,49 @@
+project:
+  type: website
+  output-dir: docs
+
+website:
+  title: |
+    Ja zum \
+    Nachtzug
+  back-to-top-navigation: true
+  navbar:
+    tools:
+      - icon: instagram
+        href: https://www.instagram.com/ja.zum.nachtzug/
+    left:
+      - text: "Actions"
+        menu:
+          - text: "Demonstrations"
+            href: Actions/Demonstrations.qmd
+          - text: "Petitions"
+            href: Actions/Petitions.qmd
+          - text: "Open letters"
+            href: Actions/Letters.qmd
+      - text: "Press"
+        menu:
+          - text: "Press releases"
+            href: Press/Press releases.qmd
+          - text: "They talk about us"
+            href: Press/Talk.qmd
+    right:
+      - text: "Contact us"
+        href: contact.qmd
+format:
+  html:
+    pagetitle: "Ja zum Nachtzug"
+    title-prefix: ""
+    embed-resources: true
+    lightbox: true
+    link-external-newwindow: true
+    theme:
+      - cosmo
+      - brand
+      - styles.scss
+    toc: false
+    grid:
+      body-width: 1000px
+      margin-width: 300px
+
+echo: false
+warning: false
