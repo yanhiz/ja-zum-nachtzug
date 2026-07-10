@@ -85,3 +85,24 @@ summary {
 }
 
 
+@media (max-width:800px) {
+
+.navbar-container {
+  padding: 0px;
+}
+.navbar-logo {
+ width: 20%;
+}
+.navbar-title {
+  display: none;
+}
+  
+.quarto-navbar-tools {
+  padding: 0px;
+}
+
+
+}
+
+
+
